@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Archive, Check, Dices, Eye, FilePlus, Minus, MoreHorizontal, Plus, RotateCcw, RotateCw, Search, Sparkles, Zap } from "lucide-react";
+import { Archive, Biohazard, Check, Dices, Eye, FilePlus, Minus, MoreHorizontal, Plus, RotateCcw, RotateCw, Search, Sparkles, Zap } from "lucide-react";
 import type { CardInstance, DragPoint, PlayerId, PlayerState, SelectedCard, TokenDefinition, ZoneName } from "../types";
 import { BattlefieldArea } from "./BattlefieldArea";
 import { CardTray } from "./CardTray";
@@ -26,6 +26,7 @@ type PlayerPanelProps = {
   onCardDragEnd: (point: DragPoint) => void;
   onLifeChange: (playerId: PlayerId, delta: number) => void;
   onEnergyChange: (playerId: PlayerId, delta: number) => void;
+  onPoisonChange: (playerId: PlayerId, delta: number) => void;
   undoDisabled: boolean;
   onUndo: () => void;
   onShuffle: (playerId: PlayerId) => void;
@@ -61,6 +62,7 @@ function ActivePlayerPanel({
   onCardDragEnd,
   onLifeChange,
   onEnergyChange,
+  onPoisonChange,
   undoDisabled,
   onUndo,
   onShuffle,
@@ -126,7 +128,7 @@ function ActivePlayerPanel({
             <span className="player-mark">{player.id}</span>
             <div>
               <h1>{player.name}</h1>
-              <p>Active - Mulls {player.mulligans}</p>
+              <p>Active - Mulls {player.mulligans}{player.poison > 0 ? ` - Poison ${player.poison}` : ""}</p>
             </div>
           </div>
           <LifeTracker playerName={player.name} life={player.life} onChange={(delta) => onLifeChange(player.id, delta)} />
@@ -186,6 +188,30 @@ function ActivePlayerPanel({
                     type="button"
                     aria-label={`${player.name} gains 1 energy`}
                     onClick={() => onEnergyChange(player.id, 1)}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="energy-control poison-control" role="group" aria-label={`${player.name} poison counters`}>
+                <span className="energy-label poison-label">
+                  <Biohazard size={16} />
+                  Poison
+                </span>
+                <div className="energy-stepper">
+                  <button
+                    type="button"
+                    aria-label={`${player.name} loses 1 poison counter`}
+                    disabled={player.poison <= 0}
+                    onClick={() => onPoisonChange(player.id, -1)}
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <strong aria-label={`${player.poison} poison counters`}>{player.poison}</strong>
+                  <button
+                    type="button"
+                    aria-label={`${player.name} gains 1 poison counter`}
+                    onClick={() => onPoisonChange(player.id, 1)}
                   >
                     <Plus size={16} />
                   </button>
@@ -358,7 +384,7 @@ function PlayerCompactPanel({
             <span className="player-mark">{player.id}</span>
             <div>
               <h1>{player.name}</h1>
-              <p>Inactive - Mulls {player.mulligans}</p>
+              <p>Inactive - Mulls {player.mulligans}{player.poison > 0 ? ` - Poison ${player.poison}` : ""}</p>
             </div>
           </div>
           <LifeTracker playerName={player.name} life={player.life} onChange={(delta) => onLifeChange(player.id, delta)} />
@@ -370,6 +396,7 @@ function PlayerCompactPanel({
           <span>Field {player.zones.battlefield.length}</span>
           <span>Grave {player.zones.graveyard.length}</span>
           <span>Exile {player.zones.exile.length}</span>
+          {player.poison > 0 && <span>Poison {player.poison}</span>}
         </div>
 
         {hasBattlefield && (

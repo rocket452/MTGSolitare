@@ -1,6 +1,8 @@
-import type { CardPrintData, MissingLookup, TokenDefinition } from "../types";
+import type { CardColor, CardPrintData, MissingLookup, TokenDefinition } from "../types";
 
-const SCRYFALL_NAMED_URL = "https://api.scryfall.com/cards/named?exact=";
+const COLOR_ORDER: CardColor[] = ["W", "U", "B", "R", "G"];
+const MAX_LOOKUP_ATTEMPTS = 3;
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 type ScryfallImageUris = {
   small?: string;
@@ -19,6 +21,7 @@ type ScryfallCardFace = {
 type ScryfallCard = {
   id?: string;
   name?: string;
+  color_identity?: string[];
   type_line?: string;
   oracle_text?: string;
   image_uris?: ScryfallImageUris;
@@ -71,6 +74,25 @@ export async function fetchUniqueCards(
   return { cards, missing };
 }
 
+export async function fetchUniqueCardColorIdentities(names: string[]): Promise<Map<string, CardPrintData>> {
+  const uniqueNames = [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+  const cards = new Map<string, CardPrintData>();
+
+  for (const typedName of uniqueNames) {
+    try {
+      const card = await fetchScryfallCard(typedName);
+      cards.set(typedName.toLowerCase(), {
+        name: card.name ?? typedName,
+        colorIdentity: getColorIdentity(card),
+      });
+    } catch {
+      // Missing color metadata should not block showing the rest of the recent deck list.
+    }
+  }
+
+  return cards;
+}
+
 export async function fetchTokenSuggestionsForCardName(cardName: string): Promise<TokenDefinition[]> {
   try {
     const card = await fetchScryfallCard(cardName);
@@ -101,6 +123,7 @@ async function fetchCardData(cardName: string): Promise<CardPrintData> {
 
   return {
     name: card.name ?? cardName,
+    colorIdentity: getColorIdentity(card),
     typeLine,
     oracleText,
     imageUrl: imageUris?.normal ?? imageUris?.large ?? imageUris?.small,
@@ -111,17 +134,61 @@ async function fetchCardData(cardName: string): Promise<CardPrintData> {
 }
 
 async function fetchScryfallCard(cardName: string): Promise<ScryfallCard> {
-  const response = await fetch(`${SCRYFALL_NAMED_URL}${encodeURIComponent(cardName)}`, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  const exactResponse = await fetchScryfallNamedCard("exact", cardName);
 
-  if (!response.ok) {
-    throw new Error(`Scryfall returned ${response.status}`);
+  if (exactResponse.ok) {
+    return (await exactResponse.json()) as ScryfallCard;
   }
 
-  return (await response.json()) as ScryfallCard;
+  if (exactResponse.status !== 404) {
+    throw new Error(`Scryfall returned ${exactResponse.status}`);
+  }
+
+  const fuzzyResponse = await fetchScryfallNamedCard("fuzzy", cardName);
+
+  if (!fuzzyResponse.ok) {
+    throw new Error(`Scryfall returned ${fuzzyResponse.status}`);
+  }
+
+  return (await fuzzyResponse.json()) as ScryfallCard;
+}
+
+async function fetchScryfallNamedCard(mode: "exact" | "fuzzy", cardName: string): Promise<Response> {
+  const url = `https://api.scryfall.com/cards/named?${mode}=${encodeURIComponent(cardName)}`;
+  let lastResponse: Response | undefined;
+
+  for (let attempt = 1; attempt <= MAX_LOOKUP_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok || !RETRYABLE_STATUS_CODES.has(response.status) || attempt === MAX_LOOKUP_ATTEMPTS) {
+        return response;
+      }
+
+      lastResponse = response;
+    } catch (error) {
+      if (attempt === MAX_LOOKUP_ATTEMPTS) {
+        throw error;
+      }
+    }
+
+    await wait(250 * attempt);
+  }
+
+  return lastResponse ?? fetch(url, { headers: { Accept: "application/json" } });
+}
+
+function wait(duration: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, duration));
+}
+
+function getColorIdentity(card: ScryfallCard): CardColor[] {
+  const identity = card.color_identity ?? [];
+  return COLOR_ORDER.filter((color) => identity.includes(color));
 }
 
 async function fetchTokenSuggestions(card: ScryfallCard): Promise<TokenDefinition[]> {

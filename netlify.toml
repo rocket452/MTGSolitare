@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/archidekt-api/*"
+  to = "https://archidekt.com/api/:splat"
+  status = 200
+  force = true

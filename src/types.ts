@@ -2,6 +2,8 @@ export type PlayerId = "A" | "B";
 
 export type ZoneName = "library" | "hand" | "battlefield" | "graveyard" | "exile";
 
+export type GameMode = "solitaire" | "passAndPlay";
+
 export type CardCounterType = "plusOne" | "generic";
 export type PowerToughnessStat = "power" | "toughness";
 
@@ -30,6 +32,7 @@ export type PlayerState = {
   name: string;
   life: number;
   energy: number;
+  poison: number;
   mulligans: number;
   openingHandKept: boolean;
   zones: PlayerZones;
@@ -53,6 +56,7 @@ export type MissingLookup = {
 
 export type GameState = {
   version: 1;
+  playMode: GameMode;
   players: Record<PlayerId, PlayerState>;
   activePlayer: PlayerId;
   selected?: SelectedCard;
@@ -66,8 +70,11 @@ export type DeckEntry = {
   count: number;
 };
 
+export type CardColor = "W" | "U" | "B" | "R" | "G";
+
 export type CardPrintData = {
   name: string;
+  colorIdentity?: CardColor[];
   imageUrl?: string;
   typeLine?: string;
   oracleText?: string;

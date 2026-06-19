@@ -3,6 +3,7 @@ import type {
   CardInstance,
   CardPrintData,
   DeckEntry,
+  GameMode,
   GameState,
   MissingLookup,
   PlayerId,
@@ -29,11 +30,13 @@ export function createGameFromDecks(
   playerBEntries: DeckEntry[],
   cardLookup: Map<string, CardPrintData>,
   missingCards: MissingLookup[],
+  playMode: GameMode = "solitaire",
 ): GameState {
   const now = new Date().toISOString();
 
   return {
     version: 1,
+    playMode,
     activePlayer: "A",
     missingCards,
     createdAt: now,
@@ -617,6 +620,20 @@ export function changeEnergy(state: GameState, playerId: PlayerId, delta: number
   });
 }
 
+export function changePoison(state: GameState, playerId: PlayerId, delta: number): GameState {
+  const player = state.players[playerId];
+  const poison = Math.max(0, player.poison + delta);
+
+  if (poison === player.poison) {
+    return state;
+  }
+
+  return replacePlayer(state, {
+    ...player,
+    poison,
+  });
+}
+
 export function findSelectedCard(state: GameState): CardInstance | undefined {
   const selected = state.selected;
 
@@ -637,6 +654,7 @@ function createPlayer(id: PlayerId, name: string, library: CardInstance[]): Play
     name,
     life: 20,
     energy: 0,
+    poison: 0,
     mulligans: 0,
     openingHandKept: false,
     zones: {

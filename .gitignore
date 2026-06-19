@@ -8,4 +8,6 @@ vite.config.d.ts
 vite.config.js
 vite-dev.*.log
 vite-wifi.*.log
+.codex-vite*.log
+.codex-vite*.pid
 .codex-remote-attachments/

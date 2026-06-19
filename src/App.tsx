@@ -2,10 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./styles.css";
 import { CardLightbox } from "./components/CardLightbox";
 import { ImportDecksModal } from "./components/ImportDecksModal";
+import { MobileAdSlot, shouldShowMobileAdSlot } from "./components/MobileAdSlot";
 import { OpeningHandsScreen } from "./components/OpeningHandsScreen";
 import { PlayerPanel } from "./components/PlayerPanel";
 import { TurnBar } from "./components/TurnBar";
-import type { CardCounterType, CardInstance, GameState, PlayerId, PlayerZones, ZoneName } from "./types";
+import type {
+  CardColor,
+  CardCounterType,
+  CardInstance,
+  CardPrintData,
+  GameMode,
+  GameState,
+  PlayerId,
+  PlayerZones,
+  ZoneName,
+} from "./types";
 import { resolveDeckImportInput } from "./utils/archidekt";
 import { isCreatureCard } from "./utils/cards";
 import { parseDecklist } from "./utils/deckParser";
@@ -14,6 +25,7 @@ import {
   addTokensToBattlefield,
   changeEnergy,
   changeLife,
+  changePoison,
   createGameFromDecks,
   discardRandomFromHand,
   drawCard,
@@ -31,12 +43,20 @@ import {
   swapCardPositions,
   toggleTapped,
 } from "./utils/game";
-import { createRecentDeck, loadRecentDecks, mergeRecentDecks, saveRecentDecks } from "./utils/recentDecks";
-import { fetchUniqueCards, type FetchProgress } from "./utils/scryfall";
+import {
+  createRecentDeck,
+  getDeckColors,
+  loadRecentDecks,
+  mergeRecentDecks,
+  saveRecentDecks,
+  type RecentDeck,
+} from "./utils/recentDecks";
+import { fetchUniqueCardColorIdentities, fetchUniqueCards, type FetchProgress } from "./utils/scryfall";
 
 const STORAGE_KEY = "mtg-solitaire-game-state";
 const STACK_LANDS_STORAGE_KEY = "mtg-solitaire-stack-lands";
 const MAX_UNDO = 60;
+const ZONE_NAMES: ZoneName[] = ["library", "hand", "battlefield", "graveyard", "exile"];
 
 type CardDragState = {
   source: {
@@ -58,6 +78,11 @@ type CardDragState = {
   };
 };
 
+type HandoffState = {
+  playerId: PlayerId;
+  context: "opening" | "turn";
+};
+
 export default function App() {
   const [game, setGame] = useState<GameState | null>(() => loadSavedGame());
   const [undoStack, setUndoStack] = useState<GameState[]>([]);
@@ -68,8 +93,10 @@ export default function App() {
   const [recentDecks, setRecentDecks] = useState(() => loadRecentDecks());
   const [inspectedCard, setInspectedCard] = useState<CardInstance | null>(null);
   const [cardDrag, setCardDrag] = useState<CardDragState | null>(null);
+  const [handoff, setHandoff] = useState<HandoffState | null>(null);
   const [stackLands, setStackLands] = useState(() => loadStoredBoolean(STACK_LANDS_STORAGE_KEY, true));
   const cardDragRef = useRef<CardDragState | null>(null);
+  const repairCardNamesRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (game) {
@@ -78,8 +105,122 @@ export default function App() {
   }, [game]);
 
   useEffect(() => {
+    if (!game) {
+      return;
+    }
+
+    const missingImportNames = getMissingImportDataNames(game).filter(
+      (name) => !repairCardNamesRef.current.has(name.toLowerCase()),
+    );
+
+    if (missingImportNames.length === 0) {
+      return;
+    }
+
+    for (const name of missingImportNames) {
+      repairCardNamesRef.current.add(name.toLowerCase());
+    }
+
+    let isCancelled = false;
+
+    fetchUniqueCards(missingImportNames)
+      .then(({ cards, missing }) => {
+        if (isCancelled) {
+          return;
+        }
+
+        const unresolvedNames = new Set(missing.map((entry) => entry.typedName.toLowerCase()));
+        const resolvedCards = new Map(
+          [...cards.entries()].filter(
+            ([key, card]) => !unresolvedNames.has(key) && (card.imageUrl || card.typeLine || card.oracleText),
+          ),
+        );
+
+        if (resolvedCards.size === 0) {
+          return;
+        }
+
+        setGame((current) => (current ? repairMissingCardImports(current, resolvedCards) : current));
+      })
+      .catch(() => {
+        for (const name of missingImportNames) {
+          repairCardNamesRef.current.delete(name.toLowerCase());
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+      for (const name of missingImportNames) {
+        repairCardNamesRef.current.delete(name.toLowerCase());
+      }
+    };
+  }, [game]);
+
+  useEffect(() => {
     localStorage.setItem(STACK_LANDS_STORAGE_KEY, String(stackLands));
   }, [stackLands]);
+
+  useEffect(() => {
+    if (!isImportOpen || isImporting) {
+      return;
+    }
+
+    const decksNeedingColors = recentDecks.filter((deck) => deck.colors === undefined);
+
+    if (decksNeedingColors.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    Promise.all(
+      decksNeedingColors.map(async (deck) => {
+        try {
+          return await resolveRecentDeckColorUpdate(deck);
+        } catch {
+          return undefined;
+        }
+      }),
+    ).then((updates) => {
+      if (isCancelled) {
+        return;
+      }
+
+      const colorUpdates = new Map<string, CardColor[]>();
+
+      for (const update of updates) {
+        if (update) {
+          colorUpdates.set(update.id, update.colors);
+        }
+      }
+
+      if (colorUpdates.size === 0) {
+        return;
+      }
+
+      setRecentDecks((current) => {
+        let changed = false;
+        const next = current.map((deck) => {
+          if (deck.colors !== undefined || !colorUpdates.has(deck.id)) {
+            return deck;
+          }
+
+          changed = true;
+          return { ...deck, colors: colorUpdates.get(deck.id) ?? [] };
+        });
+
+        if (changed) {
+          saveRecentDecks(next);
+        }
+
+        return changed ? next : current;
+      });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isImportOpen, isImporting, recentDecks]);
 
   useEffect(() => {
     const suppressCardContextMenu = (event: MouseEvent) => {
@@ -121,7 +262,7 @@ export default function App() {
     });
   }, []);
 
-  const handleImport = useCallback(async (playerADeck: string, playerBDeck: string) => {
+  const handleImport = useCallback(async (playerADeck: string, playerBDeck: string, playMode: GameMode) => {
     setIsImporting(true);
     setImportError(null);
     setImportProgress({ done: 0, total: 0, currentName: "Loading deck inputs" });
@@ -137,14 +278,17 @@ export default function App() {
       const playerBEntries = parseDecklist(resolvedPlayerBDeck.decklist);
       const uniqueNames = [...playerAEntries, ...playerBEntries].map((entry) => entry.name);
       const { cards, missing } = await fetchUniqueCards(uniqueNames, setImportProgress);
-      const nextGame = createGameFromDecks(playerAEntries, playerBEntries, cards, missing);
+      const nextGame = createGameFromDecks(playerAEntries, playerBEntries, cards, missing, playMode);
       const importedRecentDecks = [
-        createRecentDeck(resolvedPlayerBDeck, playerBEntries),
-        createRecentDeck(resolvedPlayerADeck, playerAEntries),
+        createRecentDeck(resolvedPlayerBDeck, playerBEntries, cards),
+        createRecentDeck(resolvedPlayerADeck, playerAEntries, cards),
       ];
 
       setGame(nextGame);
       setUndoStack([]);
+      setInspectedCard(null);
+      setCardDrag(null);
+      setHandoff(playMode === "passAndPlay" ? { playerId: "A", context: "opening" } : null);
       setRecentDecks((current) => {
         const nextRecentDecks = mergeRecentDecks(current, importedRecentDecks);
         saveRecentDecks(nextRecentDecks);
@@ -182,6 +326,9 @@ export default function App() {
     setUndoStack([]);
     setIsImportOpen(true);
     setInspectedCard(null);
+    setCardDrag(null);
+    cardDragRef.current = null;
+    setHandoff(null);
   }, []);
 
   const handleCardTap = useCallback((playerId: PlayerId, zone: ZoneName, card: CardInstance) => {
@@ -322,6 +469,60 @@ export default function App() {
     setCardDrag(null);
   }, [commitGameUpdate, detectCardSwapTarget, detectZoneDropTarget]);
 
+  const handleKeepOpeningHand = useCallback((playerId: PlayerId) => {
+    if (!game) {
+      return;
+    }
+
+    const nextOpeningPlayer = getNextOpeningPlayerAfterKeep(game, playerId);
+    commitGameUpdate((current) => keepOpeningHand(current, playerId));
+
+    if (game.playMode === "passAndPlay") {
+      setInspectedCard(null);
+      setCardDrag(null);
+      cardDragRef.current = null;
+      setHandoff({
+        playerId: nextOpeningPlayer ?? game.activePlayer,
+        context: nextOpeningPlayer ? "opening" : "turn",
+      });
+    }
+  }, [commitGameUpdate, game]);
+
+  const handleTurnChange = useCallback(() => {
+    if (!game) {
+      return;
+    }
+
+    setInspectedCard(null);
+    setCardDrag(null);
+    cardDragRef.current = null;
+
+    if (game.playMode === "passAndPlay") {
+      setHandoff({ playerId: getNextPlayer(game.activePlayer), context: "turn" });
+      return;
+    }
+
+    commitGameUpdate(flipActivePlayer);
+  }, [commitGameUpdate, game]);
+
+  const handleStartHandoff = useCallback(() => {
+    if (!handoff) {
+      return;
+    }
+
+    const nextHandoff = handoff;
+    setInspectedCard(null);
+    setCardDrag(null);
+    cardDragRef.current = null;
+    setHandoff(null);
+
+    if (nextHandoff.context === "turn") {
+      commitGameUpdate((current) =>
+        current.activePlayer === nextHandoff.playerId ? current : flipActivePlayer(current),
+      );
+    }
+  }, [commitGameUpdate, handoff]);
+
   if (!game) {
     return (
       <ImportDecksModal
@@ -338,18 +539,26 @@ export default function App() {
 
   const nextPlayer = game.activePlayer === "A" ? "B" : "A";
   const isChoosingOpeningHands = !game.players.A.openingHandKept || !game.players.B.openingHandKept;
+  const appShellClassName = [
+    "app-shell",
+    shouldShowMobileAdSlot && !isChoosingOpeningHands ? "has-mobile-ad" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="app-shell">
+    <div className={appShellClassName}>
       {isChoosingOpeningHands ? (
         <OpeningHandsScreen
           players={[game.players.A, game.players.B]}
           onInspectCard={setInspectedCard}
           onMulligan={(playerId) => commitGameUpdate((current) => mulliganOpeningHand(current, playerId))}
-          onKeepOpeningHand={(playerId) => commitGameUpdate((current) => keepOpeningHand(current, playerId))}
+          onKeepOpeningHand={handleKeepOpeningHand}
         />
       ) : (
         <>
+          <MobileAdSlot />
+
           <main className={`play-screen active-${game.activePlayer.toLowerCase()}`}>
             <PlayerPanel
               player={game.players.B}
@@ -368,6 +577,7 @@ export default function App() {
               onCardDragEnd={handleCardDragEnd}
               onLifeChange={(playerId, delta) => commitGameUpdate((current) => changeLife(current, playerId, delta))}
               onEnergyChange={(playerId, delta) => commitGameUpdate((current) => changeEnergy(current, playerId, delta))}
+              onPoisonChange={(playerId, delta) => commitGameUpdate((current) => changePoison(current, playerId, delta))}
               undoDisabled={undoStack.length === 0}
               onUndo={handleUndo}
               onShuffle={(playerId) => commitGameUpdate((current) => shuffleLibrary(current, playerId))}
@@ -382,7 +592,7 @@ export default function App() {
                 commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: "library", instanceId }, destination, libraryPosition))
               }
               onMulligan={(playerId) => commitGameUpdate((current) => mulliganOpeningHand(current, playerId))}
-              onKeepOpeningHand={(playerId) => commitGameUpdate((current) => keepOpeningHand(current, playerId))}
+              onKeepOpeningHand={handleKeepOpeningHand}
               onStackLandsChange={setStackLands}
               onNewGame={handleClearGame}
             />
@@ -404,6 +614,7 @@ export default function App() {
               onCardDragEnd={handleCardDragEnd}
               onLifeChange={(playerId, delta) => commitGameUpdate((current) => changeLife(current, playerId, delta))}
               onEnergyChange={(playerId, delta) => commitGameUpdate((current) => changeEnergy(current, playerId, delta))}
+              onPoisonChange={(playerId, delta) => commitGameUpdate((current) => changePoison(current, playerId, delta))}
               undoDisabled={undoStack.length === 0}
               onUndo={handleUndo}
               onShuffle={(playerId) => commitGameUpdate((current) => shuffleLibrary(current, playerId))}
@@ -418,7 +629,7 @@ export default function App() {
                 commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: "library", instanceId }, destination, libraryPosition))
               }
               onMulligan={(playerId) => commitGameUpdate((current) => mulliganOpeningHand(current, playerId))}
-              onKeepOpeningHand={(playerId) => commitGameUpdate((current) => keepOpeningHand(current, playerId))}
+              onKeepOpeningHand={handleKeepOpeningHand}
               onStackLandsChange={setStackLands}
               onNewGame={handleClearGame}
             />
@@ -427,9 +638,10 @@ export default function App() {
           <TurnBar
             activePlayer={game.activePlayer}
             nextPlayer={nextPlayer}
+            isPassAndPlay={game.playMode === "passAndPlay"}
             missingCards={game.missingCards}
             onDraw={() => commitGameUpdate((current) => drawCard(current, game.activePlayer))}
-            onFlipTurn={() => commitGameUpdate(flipActivePlayer)}
+            onFlipTurn={handleTurnChange}
           />
         </>
       )}
@@ -454,6 +666,10 @@ export default function App() {
         />
       )}
 
+      {handoff && game.playMode === "passAndPlay" && (
+        <PassAndPlayGate handoff={handoff} onStart={handleStartHandoff} />
+      )}
+
       {cardDrag && (
         <div
           className="drag-preview"
@@ -474,6 +690,133 @@ export default function App() {
         {selectedCard ? `Selected ${selectedCard.name}` : "No selected card"}
       </div>
     </div>
+  );
+}
+
+function PassAndPlayGate({ handoff, onStart }: { handoff: HandoffState; onStart: () => void }) {
+  const actionLabel = handoff.context === "opening" ? `Show Player ${handoff.playerId} hand` : `Start Player ${handoff.playerId} turn`;
+
+  return (
+    <div className="pass-gate-backdrop" role="dialog" aria-modal="true" aria-labelledby="pass-gate-title">
+      <div className={["pass-gate", `player-${handoff.playerId.toLowerCase()}`].join(" ")}>
+        <span className="player-mark">{handoff.playerId}</span>
+        <h2 id="pass-gate-title">Pass to Player {handoff.playerId}</h2>
+        <button type="button" className="pass-gate-button" onClick={onStart}>
+          {actionLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getNextPlayer(playerId: PlayerId): PlayerId {
+  return playerId === "A" ? "B" : "A";
+}
+
+function getNextOpeningPlayerAfterKeep(game: GameState, keepingPlayerId: PlayerId): PlayerId | undefined {
+  return (["A", "B"] as const).find(
+    (playerId) => playerId !== keepingPlayerId && !game.players[playerId].openingHandKept,
+  );
+}
+
+async function resolveRecentDeckColorUpdate(deck: RecentDeck): Promise<{ id: string; colors: CardColor[] } | undefined> {
+  const resolvedDeck = await resolveDeckImportInput(deck.input);
+  const entries = parseDecklist(resolvedDeck.decklist);
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const cardLookup = await fetchUniqueCardColorIdentities(entries.map((entry) => entry.name));
+  const colors = getDeckColors(entries, cardLookup);
+
+  return colors === undefined ? undefined : { id: deck.id, colors };
+}
+
+function getMissingImportDataNames(game: GameState): string[] {
+  const names = new Set<string>();
+
+  for (const player of Object.values(game.players)) {
+    for (const zoneName of ZONE_NAMES) {
+      for (const card of player.zones[zoneName]) {
+        if (!card.isToken && !card.imageUrl) {
+          names.add(card.name);
+        }
+      }
+    }
+  }
+
+  return [...names];
+}
+
+function repairMissingCardImports(game: GameState, cardLookup: Map<string, CardPrintData>): GameState {
+  let changed = false;
+  const players = { ...game.players };
+
+  for (const playerId of ["A", "B"] as const) {
+    const player = game.players[playerId];
+    const zones = { ...player.zones };
+    let playerChanged = false;
+
+    for (const zoneName of ZONE_NAMES) {
+      const repairedCards = zones[zoneName].map((card) => {
+        const repairedCard = repairCardImportData(card, cardLookup);
+
+        if (repairedCard !== card) {
+          playerChanged = true;
+        }
+
+        return repairedCard;
+      });
+
+      zones[zoneName] = repairedCards;
+    }
+
+    if (playerChanged) {
+      players[playerId] = { ...player, zones };
+      changed = true;
+    }
+  }
+
+  const missingCards = game.missingCards.filter((missing) => !cardLookup.has(missing.typedName.toLowerCase()));
+
+  if (missingCards.length !== game.missingCards.length) {
+    changed = true;
+  }
+
+  return changed ? { ...game, players, missingCards, updatedAt: new Date().toISOString() } : game;
+}
+
+function repairCardImportData(card: CardInstance, cardLookup: Map<string, CardPrintData>): CardInstance {
+  const importData = cardLookup.get(card.name.toLowerCase());
+
+  if (!importData) {
+    return card;
+  }
+
+  const nextCard = {
+    ...card,
+    name: importData.name || card.name,
+    imageUrl: card.imageUrl ?? importData.imageUrl,
+    typeLine: card.typeLine ?? importData.typeLine,
+    oracleText: card.oracleText ?? importData.oracleText,
+    basePower: card.basePower ?? importData.basePower,
+    baseToughness: card.baseToughness ?? importData.baseToughness,
+    tokenSuggestions: card.tokenSuggestions ?? importData.tokenSuggestions,
+  };
+
+  return hasCardImportDataChanged(card, nextCard) ? nextCard : card;
+}
+
+function hasCardImportDataChanged(current: CardInstance, next: CardInstance): boolean {
+  return (
+    current.name !== next.name ||
+    current.imageUrl !== next.imageUrl ||
+    current.typeLine !== next.typeLine ||
+    current.oracleText !== next.oracleText ||
+    current.basePower !== next.basePower ||
+    current.baseToughness !== next.baseToughness ||
+    current.tokenSuggestions !== next.tokenSuggestions
   );
 }
 
@@ -512,6 +855,7 @@ function loadSavedGame(): GameState | null {
 function migrateSavedGame(savedGame: GameState): GameState {
   return {
     ...savedGame,
+    playMode: migrateGameMode(savedGame.playMode),
     players: {
       A: migratePlayer(savedGame.players.A),
       B: migratePlayer(savedGame.players.B),
@@ -519,10 +863,15 @@ function migrateSavedGame(savedGame: GameState): GameState {
   };
 }
 
+function migrateGameMode(playMode?: GameMode): GameMode {
+  return playMode === "passAndPlay" ? "passAndPlay" : "solitaire";
+}
+
 function migratePlayer(player: GameState["players"][PlayerId]): GameState["players"][PlayerId] {
   return {
     ...player,
     energy: player.energy ?? 0,
+    poison: player.poison ?? 0,
     mulligans: player.mulligans ?? 0,
     openingHandKept: player.openingHandKept ?? true,
     zones: migrateZones(player.zones),

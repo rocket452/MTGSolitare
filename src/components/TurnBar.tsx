@@ -4,12 +4,13 @@ import type { MissingLookup, PlayerId } from "../types";
 type TurnBarProps = {
   activePlayer: PlayerId;
   nextPlayer: PlayerId;
+  isPassAndPlay: boolean;
   missingCards: MissingLookup[];
   onDraw: () => void;
   onFlipTurn: () => void;
 };
 
-export function TurnBar({ activePlayer, nextPlayer, missingCards, onDraw, onFlipTurn }: TurnBarProps) {
+export function TurnBar({ activePlayer, nextPlayer, isPassAndPlay, missingCards, onDraw, onFlipTurn }: TurnBarProps) {
   return (
     <footer className="turn-bar" aria-label="Turn controls">
       <button type="button" className="turn-button draw-turn-button" onClick={onDraw}>
@@ -17,7 +18,7 @@ export function TurnBar({ activePlayer, nextPlayer, missingCards, onDraw, onFlip
         Draw Player {activePlayer}
       </button>
       <button type="button" className="turn-button" onClick={onFlipTurn}>
-        Flip to Player {nextPlayer}
+        {isPassAndPlay ? "End Turn" : `Flip to Player ${nextPlayer}`}
       </button>
       {missingCards.length > 0 && (
         <details className="missing-lookups">

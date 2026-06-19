@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, Clock, Loader2, UserRound, X } from "lucide-react";
+import type { GameMode } from "../types";
 import type { RecentDeck } from "../utils/recentDecks";
 import type { FetchProgress } from "../utils/scryfall";
 
@@ -10,7 +11,7 @@ type ImportDecksModalProps = {
   recentDecks: RecentDeck[];
   canCancel: boolean;
   onCancel: () => void;
-  onImport: (playerADeck: string, playerBDeck: string) => void;
+  onImport: (playerADeck: string, playerBDeck: string, playMode: GameMode) => void;
 };
 
 const sampleA = `Deck
@@ -37,6 +38,47 @@ const sampleB = `Deck
 4 Battlefield Forge
 4 Ramunap Ruins`;
 
+type DisplayDeckColor = NonNullable<RecentDeck["colors"]>[number] | "C";
+
+const deckColorLabels: Record<DisplayDeckColor, string> = {
+  W: "white",
+  U: "blue",
+  B: "black",
+  R: "red",
+  G: "green",
+  C: "colorless",
+};
+
+function RecentDeckColorPips({ colors }: { colors?: RecentDeck["colors"] }) {
+  if (!colors) {
+    return null;
+  }
+
+  const displayColors: DisplayDeckColor[] = colors.length > 0 ? colors : ["C"];
+  const label =
+    displayColors.length === 1 && displayColors[0] === "C"
+      ? "Colorless"
+      : `Colors: ${displayColors.map((color) => deckColorLabels[color]).join(", ")}`;
+
+  return (
+    <span className="recent-deck-colors" role="img" aria-label={label} title={label}>
+      {displayColors.map((color) => (
+        <span key={color} className={`mana-pip mana-pip-${color.toLowerCase()}`} aria-hidden="true">
+          {color}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function getRecentDeckInput(deck: RecentDeck): string {
+  if (deck.source !== "archidekt") {
+    return deck.input;
+  }
+
+  return `${deck.name} (${deck.input})`;
+}
+
 export function ImportDecksModal({
   isImporting,
   progress,
@@ -48,6 +90,7 @@ export function ImportDecksModal({
 }: ImportDecksModalProps) {
   const [playerADeck, setPlayerADeck] = useState("");
   const [playerBDeck, setPlayerBDeck] = useState("");
+  const [isPassAndPlay, setIsPassAndPlay] = useState(false);
   const canImport = useMemo(
     () => playerADeck.trim().length > 0 && playerBDeck.trim().length > 0 && !isImporting,
     [playerADeck, playerBDeck, isImporting],
@@ -60,7 +103,7 @@ export function ImportDecksModal({
         onSubmit={(event) => {
           event.preventDefault();
           if (canImport) {
-            onImport(playerADeck, playerBDeck);
+            onImport(playerADeck, playerBDeck, isPassAndPlay ? "passAndPlay" : "solitaire");
           }
         }}
       >
@@ -78,19 +121,6 @@ export function ImportDecksModal({
 
         <div className="deck-input-grid">
           <label className="deck-input">
-            <span>Player B</span>
-            <textarea
-              value={playerBDeck}
-              onChange={(event) => setPlayerBDeck(event.target.value)}
-              placeholder="https://archidekt.com/decks/... or 4 Lightning Bolt"
-              spellCheck={false}
-            />
-            <button type="button" className="text-button" onClick={() => setPlayerBDeck(sampleB)}>
-              Use sample
-            </button>
-          </label>
-
-          <label className="deck-input">
             <span>Player A</span>
             <textarea
               value={playerADeck}
@@ -99,6 +129,19 @@ export function ImportDecksModal({
               spellCheck={false}
             />
             <button type="button" className="text-button" onClick={() => setPlayerADeck(sampleA)}>
+              Use sample
+            </button>
+          </label>
+
+          <label className="deck-input">
+            <span>Player B</span>
+            <textarea
+              value={playerBDeck}
+              onChange={(event) => setPlayerBDeck(event.target.value)}
+              placeholder="https://archidekt.com/decks/... or 4 Lightning Bolt"
+              spellCheck={false}
+            />
+            <button type="button" className="text-button" onClick={() => setPlayerBDeck(sampleB)}>
               Use sample
             </button>
           </label>
@@ -117,30 +160,33 @@ export function ImportDecksModal({
                 <article className="recent-deck" key={deck.id}>
                   <div className="recent-deck-copy">
                     <strong>{deck.name}</strong>
-                    <small>
-                      {deck.source === "archidekt" ? "Archidekt" : "Text"} - {deck.cardCount} cards
+                    <small className="recent-deck-meta">
+                      <span className="recent-deck-summary">
+                        {deck.source === "archidekt" ? "Archidekt" : "Text"} - {deck.cardCount} cards
+                      </span>
+                      <RecentDeckColorPips colors={deck.colors} />
                     </small>
                   </div>
                   <div className="recent-deck-actions">
                     <button
                       type="button"
                       className="recent-deck-button"
-                      aria-label={`Use ${deck.name} for Player B`}
+                      aria-label={`Use ${deck.name} for Player A`}
                       disabled={isImporting}
-                      onClick={() => setPlayerBDeck(deck.input)}
+                      onClick={() => setPlayerADeck(getRecentDeckInput(deck))}
                     >
                       <UserRound size={15} />
-                      <span>B</span>
+                      <span>A</span>
                     </button>
                     <button
                       type="button"
                       className="recent-deck-button"
-                      aria-label={`Use ${deck.name} for Player A`}
+                      aria-label={`Use ${deck.name} for Player B`}
                       disabled={isImporting}
-                      onClick={() => setPlayerADeck(deck.input)}
+                      onClick={() => setPlayerBDeck(getRecentDeckInput(deck))}
                     >
                       <UserRound size={15} />
-                      <span>A</span>
+                      <span>B</span>
                     </button>
                   </div>
                 </article>
@@ -162,6 +208,15 @@ export function ImportDecksModal({
         {errorMessage && <div className="import-error">{errorMessage}</div>}
 
         <footer className="import-footer">
+          <label className="mode-checkbox">
+            <input
+              type="checkbox"
+              checked={isPassAndPlay}
+              disabled={isImporting}
+              onChange={(event) => setIsPassAndPlay(event.currentTarget.checked)}
+            />
+            <span>Pass and play</span>
+          </label>
           <button type="submit" className="import-button" disabled={!canImport}>
             {isImporting ? <Loader2 size={18} className="spin" /> : <Check size={18} />}
             Import and Shuffle
