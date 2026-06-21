@@ -1,4 +1,4 @@
-import { Minus, Plus, X } from "lucide-react";
+import { Minus, Plus, RotateCw, X } from "lucide-react";
 import { useEffect } from "react";
 import type { CardCounterType, CardInstance } from "../types";
 import { getGenericCounterCount, getPlusOneCounterCount } from "../utils/game";
@@ -7,15 +7,18 @@ type CardLightboxProps = {
   card: CardInstance;
   onClose: () => void;
   onAdjustCounter: (counterType: CardCounterType, delta: number) => void;
+  onTransform: () => void;
 };
 
 export function CardLightbox({
   card,
   onClose,
   onAdjustCounter,
+  onTransform,
 }: CardLightboxProps) {
   const plusOneCounters = getPlusOneCounterCount(card);
   const genericCounters = getGenericCounterCount(card);
+  const canTransform = Boolean(card.faces && card.faces.length > 1);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -45,6 +48,12 @@ export function CardLightbox({
           )}
         </button>
         <div className="lightbox-control-panel">
+          {canTransform && (
+            <button type="button" className="lightbox-transform-button" onClick={onTransform}>
+              <RotateCw size={17} />
+              Transform
+            </button>
+          )}
           <div className="lightbox-counter-panel" aria-label="Card counters">
             <CounterControl
               label="+1/+1"

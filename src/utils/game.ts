@@ -449,6 +449,33 @@ export function toggleTapped(state: GameState, playerId: PlayerId, instanceId: s
   });
 }
 
+export function transformCard(state: GameState, instanceId: string): GameState {
+  return updateCardByInstanceId(state, instanceId, (card) => {
+    const faces = card.faces;
+
+    if (!faces || faces.length < 2) {
+      return card;
+    }
+
+    const currentFaceIndex = card.faceIndex ?? findCurrentFaceIndex(card);
+    const nextFaceIndex = (currentFaceIndex + 1) % faces.length;
+    const nextFace = faces[nextFaceIndex];
+
+    return {
+      ...card,
+      faceIndex: nextFaceIndex,
+      name: nextFace.name,
+      imageUrl: nextFace.imageUrl ?? card.imageUrl,
+      typeLine: nextFace.typeLine ?? card.typeLine,
+      oracleText: nextFace.oracleText ?? card.oracleText,
+      basePower: nextFace.basePower,
+      baseToughness: nextFace.baseToughness,
+      displayPower: nextFace.basePower,
+      displayToughness: nextFace.baseToughness,
+    };
+  });
+}
+
 export function adjustCounters(state: GameState, delta: number): GameState {
   const selected = state.selected;
 
@@ -682,20 +709,29 @@ function buildLibrary(entries: DeckEntry[], cardLookup: Map<string, CardPrintDat
 }
 
 function createCardInstance(card: CardPrintData, isToken = false): CardInstance {
+  const firstFace = card.faces?.[0];
+
   return {
     instanceId: createId(),
-    name: card.name,
-    imageUrl: card.imageUrl,
-    typeLine: card.typeLine,
-    oracleText: card.oracleText,
-    basePower: card.basePower,
-    baseToughness: card.baseToughness,
+    name: firstFace?.name ?? card.name,
+    imageUrl: firstFace?.imageUrl ?? card.imageUrl,
+    faces: card.faces,
+    faceIndex: card.faces && card.faces.length > 1 ? 0 : undefined,
+    typeLine: firstFace?.typeLine ?? card.typeLine,
+    oracleText: firstFace?.oracleText ?? card.oracleText,
+    basePower: firstFace?.basePower ?? card.basePower,
+    baseToughness: firstFace?.baseToughness ?? card.baseToughness,
     tapped: false,
     plusOneCounters: 0,
     genericCounters: 0,
     isToken,
     tokenSuggestions: card.tokenSuggestions,
   };
+}
+
+function findCurrentFaceIndex(card: CardInstance): number {
+  const faceIndex = card.faces?.findIndex((face) => face.name === card.name || face.imageUrl === card.imageUrl) ?? -1;
+  return faceIndex >= 0 ? faceIndex : 0;
 }
 
 function getSourceCardsAfterMove(

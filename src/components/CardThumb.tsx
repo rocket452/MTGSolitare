@@ -107,6 +107,9 @@ export function CardThumb({
     if (!dragging.current) {
       dragging.current = true;
       suppressClick.current = true;
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
       onDragStart?.(card, point);
     }
 
@@ -194,6 +197,7 @@ export function CardThumb({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
         onPointerLeave={clearLongPress}
         onClick={handleClick}
         onDoubleClick={(event) => {

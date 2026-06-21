@@ -7,6 +7,7 @@ import { LibrarySearchModal } from "./LibrarySearchModal";
 import { LifeTracker } from "./LifeTracker";
 import { PeekLibraryModal } from "./PeekLibraryModal";
 import { TokenPickerModal } from "./TokenPickerModal";
+import { ZoneCardsModal } from "./ZoneCardsModal";
 import { ZoneChips } from "./ZoneChips";
 
 type PlayerPanelProps = {
@@ -18,6 +19,7 @@ type PlayerPanelProps = {
   dragTargetZone?: ZoneName;
   dragSourcePlayerId?: PlayerId;
   isDraggingCard?: boolean;
+  handFlashTrigger?: number;
   stackLands: boolean;
   onCardTap: (playerId: PlayerId, zone: ZoneName, card: CardInstance) => void;
   onInspectCard: (card: CardInstance) => void;
@@ -36,6 +38,7 @@ type PlayerPanelProps = {
   onMoveLibraryCardsToBottom: (playerId: PlayerId, instanceIds: string[]) => void;
   onMoveLibraryCardsToGraveyard: (playerId: PlayerId, instanceIds: string[]) => void;
   onMoveLibraryCard: (playerId: PlayerId, instanceId: string, destination: ZoneName, libraryPosition?: "top" | "bottom") => void;
+  onMoveCardToZone: (playerId: PlayerId, sourceZone: ZoneName, instanceId: string, destination: ZoneName, libraryPosition?: "top" | "bottom") => void;
   onMulligan: (playerId: PlayerId) => void;
   onKeepOpeningHand: (playerId: PlayerId) => void;
   onStackLandsChange: (enabled: boolean) => void;
@@ -54,6 +57,7 @@ function ActivePlayerPanel({
   dragTargetZone,
   dragSourcePlayerId,
   isDraggingCard,
+  handFlashTrigger,
   stackLands,
   onCardTap,
   onInspectCard,
@@ -72,6 +76,7 @@ function ActivePlayerPanel({
   onMoveLibraryCardsToBottom,
   onMoveLibraryCardsToGraveyard,
   onMoveLibraryCard,
+  onMoveCardToZone,
   onMulligan,
   onKeepOpeningHand,
   onStackLandsChange,
@@ -83,8 +88,10 @@ function ActivePlayerPanel({
   const playerDragTargetZone = dragTargetPlayerId === player.id ? dragTargetZone : undefined;
   const [isRandomDiscardOpen, setIsRandomDiscardOpen] = useState(false);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
+  const [isLibraryActionsOpen, setIsLibraryActionsOpen] = useState(false);
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const [isLibrarySearchOpen, setIsLibrarySearchOpen] = useState(false);
+  const [openCardZone, setOpenCardZone] = useState<Extract<ZoneName, "graveyard" | "exile"> | null>(null);
   const [isTokenPickerOpen, setIsTokenPickerOpen] = useState(false);
   const [shuffleMessage, setShuffleMessage] = useState("");
   const handCount = player.zones.hand.length;
@@ -100,15 +107,27 @@ function ActivePlayerPanel({
   };
   const handleOpenPeek = () => {
     setIsMoreActionsOpen(false);
+    setIsLibraryActionsOpen(false);
     setIsPeekOpen(true);
+  };
+  const handleClosePeek = () => {
+    setIsPeekOpen(false);
+    onShuffle(player.id);
+    setShuffleMessage("Library shuffled");
   };
   const handleOpenLibrarySearch = () => {
     setIsMoreActionsOpen(false);
+    setIsLibraryActionsOpen(false);
     setIsLibrarySearchOpen(true);
   };
   const handleOpenTokenPicker = () => {
     setIsMoreActionsOpen(false);
     setIsTokenPickerOpen(true);
+  };
+  const handleOpenCardZone = (zone: ZoneName) => {
+    if (zone === "graveyard" || zone === "exile") {
+      setOpenCardZone(zone);
+    }
   };
 
   useEffect(() => {
@@ -266,9 +285,12 @@ function ActivePlayerPanel({
             library={player.zones.library}
             onInspectCard={onInspectCard}
             onReorderTopCards={(orderedInstanceIds) => onReorderTopLibrary(player.id, orderedInstanceIds)}
+            onMoveCard={(instanceId, destination, libraryPosition) =>
+              onMoveLibraryCard(player.id, instanceId, destination, libraryPosition)
+            }
             onMoveSelectedToBottom={(instanceIds) => onMoveLibraryCardsToBottom(player.id, instanceIds)}
             onMoveSelectedToGraveyard={(instanceIds) => onMoveLibraryCardsToGraveyard(player.id, instanceIds)}
-            onClose={() => setIsPeekOpen(false)}
+            onClose={handleClosePeek}
           />
         )}
 
@@ -320,8 +342,44 @@ function ActivePlayerPanel({
           canDropToPlayer={canDropToPlayer}
           dragTargetPlayerId={dragTargetPlayerId === player.id ? dragTargetPlayerId : undefined}
           dragTargetZone={playerDragTargetZone}
-          onLibraryLongPress={handleOpenLibrarySearch}
+          openZone={openCardZone}
+          onSelectZone={handleOpenCardZone}
+          onZoneLongPress={handleOpenCardZone}
+          onLibraryLongPress={() => setIsLibraryActionsOpen(true)}
+          onLibraryDragStart={(card, point) => onCardDragStart(player.id, "library", card, point)}
+          onLibraryDragMove={onCardDragMove}
+          onLibraryDragEnd={onCardDragEnd}
         />
+
+        {isLibraryActionsOpen && (
+          <div
+            className="library-actions-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${player.id}-library-actions-title`}
+            onClick={() => setIsLibraryActionsOpen(false)}
+          >
+            <div className="library-actions-sheet" onClick={(event) => event.stopPropagation()}>
+              <header>
+                <h2 id={`${player.id}-library-actions-title`}>Library</h2>
+                <span>{player.zones.library.length} cards</span>
+              </header>
+              <div className="library-actions-options">
+                <button type="button" onClick={handleOpenPeek}>
+                  <Eye size={17} />
+                  Peek
+                </button>
+                <button type="button" onClick={handleOpenLibrarySearch}>
+                  <Search size={17} />
+                  Search
+                </button>
+              </div>
+              <button type="button" className="library-actions-cancel" onClick={() => setIsLibraryActionsOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLibrarySearchOpen && (
           <LibrarySearchModal
@@ -336,6 +394,20 @@ function ActivePlayerPanel({
           />
         )}
 
+        {openCardZone && (
+          <ZoneCardsModal
+            playerId={player.id}
+            playerName={player.name}
+            zoneName={openCardZone}
+            cards={player.zones[openCardZone]}
+            onInspectCard={onInspectCard}
+            onMoveCard={(instanceId, destination) =>
+              onMoveCardToZone(player.id, openCardZone, instanceId, destination)
+            }
+            onClose={() => setOpenCardZone(null)}
+          />
+        )}
+
         <CardTray
           playerId={player.id}
           title="Hand"
@@ -344,6 +416,7 @@ function ActivePlayerPanel({
           selected={selectedForPlayer}
           swapTarget={playerSwapTarget}
           compact
+          flashTrigger={handFlashTrigger}
           emptyText="Hand empty"
           onCardTap={(zone, card) => onCardTap(player.id, zone, card)}
           onInspectCard={onInspectCard}

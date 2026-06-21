@@ -11,6 +11,8 @@ export type CardInstance = {
   instanceId: string;
   name: string;
   imageUrl?: string;
+  faces?: CardFaceData[];
+  faceIndex?: number;
   typeLine?: string;
   oracleText?: string;
   tapped?: boolean;
@@ -76,11 +78,21 @@ export type CardPrintData = {
   name: string;
   colorIdentity?: CardColor[];
   imageUrl?: string;
+  faces?: CardFaceData[];
   typeLine?: string;
   oracleText?: string;
   basePower?: number;
   baseToughness?: number;
   tokenSuggestions?: TokenDefinition[];
+};
+
+export type CardFaceData = {
+  name: string;
+  imageUrl?: string;
+  typeLine?: string;
+  oracleText?: string;
+  basePower?: number;
+  baseToughness?: number;
 };
 
 export type TokenDefinition = {

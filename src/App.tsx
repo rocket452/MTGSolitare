@@ -42,6 +42,7 @@ import {
   shuffleLibrary,
   swapCardPositions,
   toggleTapped,
+  transformCard,
 } from "./utils/game";
 import {
   createRecentDeck,
@@ -94,6 +95,7 @@ export default function App() {
   const [inspectedCard, setInspectedCard] = useState<CardInstance | null>(null);
   const [cardDrag, setCardDrag] = useState<CardDragState | null>(null);
   const [handoff, setHandoff] = useState<HandoffState | null>(null);
+  const [handFlash, setHandFlash] = useState<{ playerId: PlayerId; trigger: number } | null>(null);
   const [stackLands, setStackLands] = useState(() => loadStoredBoolean(STACK_LANDS_STORAGE_KEY, true));
   const cardDragRef = useRef<CardDragState | null>(null);
   const repairCardNamesRef = useRef(new Set<string>());
@@ -348,6 +350,14 @@ export default function App() {
     commitGameUpdate((current) => adjustCardCounters(current, inspectedCard.instanceId, counterType, delta));
   }, [commitGameUpdate, inspectedCard]);
 
+  const handleTransformInspectedCard = useCallback(() => {
+    if (!inspectedCard) {
+      return;
+    }
+
+    commitGameUpdate((current) => transformCard(current, inspectedCard.instanceId));
+  }, [commitGameUpdate, inspectedCard]);
+
   const detectZoneDropTarget = useCallback((x: number, y: number, sourcePlayerId: PlayerId) => {
     const element = document.elementFromPoint(x, y);
     const dropZone = element?.closest<HTMLElement>("[data-drop-zone][data-player-id]");
@@ -469,6 +479,48 @@ export default function App() {
     setCardDrag(null);
   }, [commitGameUpdate, detectCardSwapTarget, detectZoneDropTarget]);
 
+  useEffect(() => {
+    if (!cardDrag) {
+      return;
+    }
+
+    const finishDrag = (event?: MouseEvent | PointerEvent | TouchEvent) => {
+      const activeDrag = cardDragRef.current;
+
+      if (!activeDrag) {
+        setCardDrag(null);
+        return;
+      }
+
+      const changedTouch = event instanceof TouchEvent ? event.changedTouches[0] : undefined;
+      const point =
+        event instanceof MouseEvent || event instanceof PointerEvent
+          ? { x: event.clientX, y: event.clientY }
+          : changedTouch
+            ? { x: changedTouch.clientX, y: changedTouch.clientY }
+            : activeDrag.point;
+
+      handleCardDragEnd(point);
+    };
+    const finishDragOnBlur = () => finishDrag();
+
+    window.addEventListener("pointerup", finishDrag, true);
+    window.addEventListener("pointercancel", finishDrag, true);
+    window.addEventListener("mouseup", finishDrag, true);
+    window.addEventListener("touchend", finishDrag, true);
+    window.addEventListener("touchcancel", finishDrag, true);
+    window.addEventListener("blur", finishDragOnBlur, true);
+
+    return () => {
+      window.removeEventListener("pointerup", finishDrag, true);
+      window.removeEventListener("pointercancel", finishDrag, true);
+      window.removeEventListener("mouseup", finishDrag, true);
+      window.removeEventListener("touchend", finishDrag, true);
+      window.removeEventListener("touchcancel", finishDrag, true);
+      window.removeEventListener("blur", finishDragOnBlur, true);
+    };
+  }, [cardDrag, handleCardDragEnd]);
+
   const handleKeepOpeningHand = useCallback((playerId: PlayerId) => {
     if (!game) {
       return;
@@ -503,6 +555,16 @@ export default function App() {
     }
 
     commitGameUpdate(flipActivePlayer);
+  }, [commitGameUpdate, game]);
+
+  const handleDraw = useCallback(() => {
+    if (!game) {
+      return;
+    }
+
+    const playerId = game.activePlayer;
+    commitGameUpdate((current) => drawCard(current, playerId));
+    setHandFlash((current) => ({ playerId, trigger: (current?.trigger ?? 0) + 1 }));
   }, [commitGameUpdate, game]);
 
   const handleStartHandoff = useCallback(() => {
@@ -570,6 +632,7 @@ export default function App() {
               dragTargetZone={cardDrag?.targetZone}
               dragSourcePlayerId={cardDrag?.source.playerId}
               isDraggingCard={Boolean(cardDrag)}
+              handFlashTrigger={handFlash?.playerId === "B" ? handFlash.trigger : undefined}
               onCardTap={handleCardTap}
               onInspectCard={setInspectedCard}
               onCardDragStart={handleCardDragStart}
@@ -590,6 +653,9 @@ export default function App() {
               onMoveLibraryCardsToGraveyard={(playerId, instanceIds) => commitGameUpdate((current) => moveLibraryCardsToGraveyard(current, playerId, instanceIds))}
               onMoveLibraryCard={(playerId, instanceId, destination, libraryPosition) =>
                 commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: "library", instanceId }, destination, libraryPosition))
+              }
+              onMoveCardToZone={(playerId, sourceZone, instanceId, destination, libraryPosition) =>
+                commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: sourceZone, instanceId }, destination, libraryPosition))
               }
               onMulligan={(playerId) => commitGameUpdate((current) => mulliganOpeningHand(current, playerId))}
               onKeepOpeningHand={handleKeepOpeningHand}
@@ -607,6 +673,7 @@ export default function App() {
               dragTargetZone={cardDrag?.targetZone}
               dragSourcePlayerId={cardDrag?.source.playerId}
               isDraggingCard={Boolean(cardDrag)}
+              handFlashTrigger={handFlash?.playerId === "A" ? handFlash.trigger : undefined}
               onCardTap={handleCardTap}
               onInspectCard={setInspectedCard}
               onCardDragStart={handleCardDragStart}
@@ -628,6 +695,9 @@ export default function App() {
               onMoveLibraryCard={(playerId, instanceId, destination, libraryPosition) =>
                 commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: "library", instanceId }, destination, libraryPosition))
               }
+              onMoveCardToZone={(playerId, sourceZone, instanceId, destination, libraryPosition) =>
+                commitGameUpdate((current) => moveCardToZone(current, { playerId, zone: sourceZone, instanceId }, destination, libraryPosition))
+              }
               onMulligan={(playerId) => commitGameUpdate((current) => mulliganOpeningHand(current, playerId))}
               onKeepOpeningHand={handleKeepOpeningHand}
               onStackLandsChange={setStackLands}
@@ -640,7 +710,7 @@ export default function App() {
             nextPlayer={nextPlayer}
             isPassAndPlay={game.playMode === "passAndPlay"}
             missingCards={game.missingCards}
-            onDraw={() => commitGameUpdate((current) => drawCard(current, game.activePlayer))}
+            onDraw={handleDraw}
             onFlipTurn={handleTurnChange}
           />
         </>
@@ -663,6 +733,7 @@ export default function App() {
           card={currentInspectedCard}
           onClose={() => setInspectedCard(null)}
           onAdjustCounter={handleAdjustInspectedCounter}
+          onTransform={handleTransformInspectedCard}
         />
       )}
 
@@ -742,6 +813,10 @@ function getMissingImportDataNames(game: GameState): string[] {
         if (!card.isToken && !card.imageUrl) {
           names.add(card.name);
         }
+
+        if (!card.isToken && !card.faces && /\btransform\b/i.test(card.oracleText ?? "")) {
+          names.add(card.name);
+        }
       }
     }
   }
@@ -800,6 +875,7 @@ function repairCardImportData(card: CardInstance, cardLookup: Map<string, CardPr
     imageUrl: card.imageUrl ?? importData.imageUrl,
     typeLine: card.typeLine ?? importData.typeLine,
     oracleText: card.oracleText ?? importData.oracleText,
+    faces: card.faces ?? importData.faces,
     basePower: card.basePower ?? importData.basePower,
     baseToughness: card.baseToughness ?? importData.baseToughness,
     tokenSuggestions: card.tokenSuggestions ?? importData.tokenSuggestions,
@@ -814,6 +890,7 @@ function hasCardImportDataChanged(current: CardInstance, next: CardInstance): bo
     current.imageUrl !== next.imageUrl ||
     current.typeLine !== next.typeLine ||
     current.oracleText !== next.oracleText ||
+    current.faces !== next.faces ||
     current.basePower !== next.basePower ||
     current.baseToughness !== next.baseToughness ||
     current.tokenSuggestions !== next.tokenSuggestions

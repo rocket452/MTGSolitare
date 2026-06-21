@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { CardInstance, DragPoint, PlayerId, SelectedCard, ZoneName } from "../types";
 import { CardThumb } from "./CardThumb";
 
@@ -15,6 +16,7 @@ type CardTrayProps = {
   selected?: SelectedCard;
   swapTarget?: SelectedCard;
   compact?: boolean;
+  flashTrigger?: number;
   groupHandCards?: boolean;
   emptyText: string;
   onCardTap: (zone: ZoneName, card: CardInstance) => void;
@@ -32,6 +34,7 @@ export function CardTray({
   selected,
   swapTarget,
   compact,
+  flashTrigger,
   groupHandCards = true,
   emptyText,
   onCardTap,
@@ -40,15 +43,36 @@ export function CardTray({
   onCardDragMove,
   onCardDragEnd,
 }: CardTrayProps) {
+  const [isFlashing, setIsFlashing] = useState(false);
   const cardGroups = zoneName === "hand" && groupHandCards ? buildHandCardGroups(cards) : cards.map((card) => ({
     key: card.instanceId,
     card,
     cards: [card],
   }));
 
+  useEffect(() => {
+    if (!flashTrigger) {
+      return undefined;
+    }
+
+    setIsFlashing(false);
+    const startFrame = window.requestAnimationFrame(() => setIsFlashing(true));
+    const timeoutId = window.setTimeout(() => setIsFlashing(false), 620);
+
+    return () => {
+      window.cancelAnimationFrame(startFrame);
+      window.clearTimeout(timeoutId);
+    };
+  }, [flashTrigger]);
+
   return (
     <section
-      className={["card-tray", zoneName === "hand" ? "is-hand-tray" : "", compact ? "is-compact" : ""].join(" ")}
+      className={[
+        "card-tray",
+        zoneName === "hand" ? "is-hand-tray" : "",
+        compact ? "is-compact" : "",
+        isFlashing ? "is-hand-flashing" : "",
+      ].join(" ")}
       data-drop-zone={zoneName}
       data-player-id={playerId}
     >

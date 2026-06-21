@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Eye, ListEnd, Skull, X } from "lucide-react";
-import type { CardInstance, PlayerId } from "../types";
+import { ArrowDown, ArrowUp, Eye, Hand, ListEnd, Skull, Swords, X } from "lucide-react";
+import type { CardInstance, PlayerId, ZoneName } from "../types";
 import { CardThumb } from "./CardThumb";
 
 type PeekLibraryModalProps = {
@@ -9,6 +9,7 @@ type PeekLibraryModalProps = {
   library: CardInstance[];
   onInspectCard: (card: CardInstance) => void;
   onReorderTopCards: (orderedInstanceIds: string[]) => void;
+  onMoveCard: (instanceId: string, destination: ZoneName, libraryPosition?: "top" | "bottom") => void;
   onMoveSelectedToBottom: (instanceIds: string[]) => void;
   onMoveSelectedToGraveyard: (instanceIds: string[]) => void;
   onClose: () => void;
@@ -22,6 +23,7 @@ export function PeekLibraryModal({
   library,
   onInspectCard,
   onReorderTopCards,
+  onMoveCard,
   onMoveSelectedToBottom,
   onMoveSelectedToGraveyard,
   onClose,
@@ -83,6 +85,10 @@ export function PeekLibraryModal({
     const nextCards = [...shownCards];
     [nextCards[index], nextCards[targetIndex]] = [nextCards[targetIndex], nextCards[index]];
     onReorderTopCards(nextCards.map((card) => card.instanceId));
+  };
+
+  const moveCardToZone = (instanceId: string, destination: ZoneName) => {
+    onMoveCard(instanceId, destination);
   };
 
   const handleMoveSelectedToBottom = () => {
@@ -165,20 +171,36 @@ export function PeekLibraryModal({
                 />
                 <strong>{card.name}</strong>
                 <div className="peek-card-actions">
-                  <button type="button" disabled={index === 0} aria-label={`Move ${card.name} up`} onClick={() => moveCard(index, -1)}>
-                    <ArrowUp size={15} />
-                  </button>
-                  <button type="button" className={selectedIds.has(card.instanceId) ? "is-selected" : ""} onClick={() => toggleSelected(card.instanceId)}>
-                    {selectedIds.has(card.instanceId) ? "Selected" : "Select"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === shownCards.length - 1}
-                    aria-label={`Move ${card.name} down`}
-                    onClick={() => moveCard(index, 1)}
-                  >
-                    <ArrowDown size={15} />
-                  </button>
+                  <div className="peek-card-order-actions">
+                    <button type="button" disabled={index === 0} aria-label={`Move ${card.name} up`} onClick={() => moveCard(index, -1)}>
+                      <ArrowUp size={15} />
+                    </button>
+                    <button type="button" className={selectedIds.has(card.instanceId) ? "is-selected" : ""} onClick={() => toggleSelected(card.instanceId)}>
+                      {selectedIds.has(card.instanceId) ? "Selected" : "Select"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === shownCards.length - 1}
+                      aria-label={`Move ${card.name} down`}
+                      onClick={() => moveCard(index, 1)}
+                    >
+                      <ArrowDown size={15} />
+                    </button>
+                  </div>
+                  <div className="peek-card-move-actions">
+                    <button type="button" aria-label={`Move ${card.name} to hand`} onClick={() => moveCardToZone(card.instanceId, "hand")}>
+                      <Hand size={15} />
+                      Hand
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${card.name} to battlefield`}
+                      onClick={() => moveCardToZone(card.instanceId, "battlefield")}
+                    >
+                      <Swords size={15} />
+                      Field
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}

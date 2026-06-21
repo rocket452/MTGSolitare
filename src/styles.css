@@ -1237,8 +1237,26 @@ button:disabled {
 .peek-card-actions {
   display: grid;
   width: 100%;
+  gap: 4px;
+}
+
+.peek-card-order-actions {
+  display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 32px;
   gap: 4px;
+}
+
+.peek-card-move-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.peek-card-move-actions button {
+  gap: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .peek-card-actions button {
@@ -1443,6 +1461,164 @@ button:disabled {
 }
 
 .library-search-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.zone-cards-modal {
+  display: grid;
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 24px);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+}
+
+.zone-cards-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.zone-cards-header h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.zone-cards-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.zone-cards-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  scrollbar-width: thin;
+}
+
+.zone-cards-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-areas:
+    "thumb copy"
+    "actions actions";
+  gap: 6px 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.zone-cards-card .card-thumb-shell {
+  grid-area: thumb;
+}
+
+.zone-cards-card .card-thumb.is-compact {
+  width: 48px;
+  height: 67px;
+}
+
+.zone-cards-position {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  display: grid;
+  min-width: 28px;
+  min-height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #111827;
+  font-size: 10px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.zone-cards-copy {
+  grid-area: copy;
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.zone-cards-copy strong,
+.zone-cards-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-cards-copy strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.zone-cards-copy small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.zone-cards-actions {
+  grid-area: actions;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.zone-cards-actions button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  overflow: hidden;
+  padding: 0 8px;
+  border: 1px solid #cfd7e6;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.zone-cards-actions button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.zone-cards-empty {
   display: grid;
   min-height: 180px;
   place-items: center;
@@ -1756,6 +1932,28 @@ button:disabled {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.26);
+}
+
+.lightbox-transform-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 8px;
+  color: #ffffff;
+  background: #172033;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  touch-action: manipulation;
+}
+
+.lightbox-transform-button:active {
+  transform: translateY(1px);
 }
 
 .lightbox-counter-group {
@@ -2459,6 +2657,74 @@ button:disabled {
   border-color: var(--accent);
 }
 
+.library-actions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: grid;
+  place-items: end center;
+  padding: 12px;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.library-actions-sheet {
+  display: grid;
+  width: min(340px, 100%);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.28);
+}
+
+.library-actions-sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.library-actions-sheet h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.library-actions-sheet header span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.library-actions-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.library-actions-options button,
+.library-actions-cancel {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #cfd7e6;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  font: inherit;
+  font-weight: 900;
+  touch-action: manipulation;
+}
+
+.library-actions-cancel {
+  color: #475569;
+  background: #f8fafc;
+}
+
 .more-toggle {
   display: flex;
   min-height: 44px;
@@ -3099,6 +3365,14 @@ button:disabled {
   padding: 0 8px 10px;
 }
 
+.card-tray.is-hand-tray.is-hand-flashing {
+  animation: hand-tray-flash 620ms ease-out;
+}
+
+.card-tray.is-hand-tray.is-hand-flashing .card-thumb.is-hand-card {
+  animation: hand-card-flash 620ms ease-out;
+}
+
 .card-tray.is-hand-tray .card-thumb-shell.is-hand-card,
 .card-tray.is-hand-tray .card-thumb.is-hand-card {
   width: var(--hand-card-width);
@@ -3117,6 +3391,30 @@ button:disabled {
 
 .card-tray.is-hand-tray .card-thumb.is-hand-card:active {
   transform: translateY(-1px) scale(1.01);
+}
+
+@keyframes hand-tray-flash {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+
+  24% {
+    box-shadow:
+      0 0 0 2px rgba(34, 197, 94, 0.58),
+      0 0 22px rgba(34, 197, 94, 0.34);
+  }
+}
+
+@keyframes hand-card-flash {
+  0%,
+  100% {
+    filter: none;
+  }
+
+  24% {
+    filter: brightness(1.18) saturate(1.12);
+  }
 }
 
 .stack-count-badge {
