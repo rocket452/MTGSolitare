@@ -1,4 +1,4 @@
-import type { CardColor, CardPrintData, MissingLookup, TokenDefinition } from "../types";
+import type { CardColor, CardFaceData, CardPrintData, MissingLookup, TokenDefinition } from "../types";
 
 const COLOR_ORDER: CardColor[] = ["W", "U", "B", "R", "G"];
 const MAX_LOOKUP_ATTEMPTS = 3;
@@ -11,6 +11,7 @@ type ScryfallImageUris = {
 };
 
 type ScryfallCardFace = {
+  name?: string;
   type_line?: string;
   oracle_text?: string;
   image_uris?: ScryfallImageUris;
@@ -106,6 +107,7 @@ async function fetchCardData(cardName: string): Promise<CardPrintData> {
   const card = await fetchScryfallCard(cardName);
   const firstFaceWithImage = card.card_faces?.find((face) => face.image_uris);
   const imageUris = card.image_uris ?? firstFaceWithImage?.image_uris;
+  const faces = getCardFaces(card);
   const typeLine =
     card.type_line ??
     card.card_faces
@@ -127,6 +129,7 @@ async function fetchCardData(cardName: string): Promise<CardPrintData> {
     typeLine,
     oracleText,
     imageUrl: imageUris?.normal ?? imageUris?.large ?? imageUris?.small,
+    faces,
     basePower: powerToughness?.power,
     baseToughness: powerToughness?.toughness,
     tokenSuggestions,
@@ -151,6 +154,26 @@ async function fetchScryfallCard(cardName: string): Promise<ScryfallCard> {
   }
 
   return (await fuzzyResponse.json()) as ScryfallCard;
+}
+
+function getCardFaces(card: ScryfallCard): CardFaceData[] | undefined {
+  const faces = card.card_faces
+    ?.map((face) => {
+      const imageUris = face.image_uris;
+      const powerToughness = getNumericFacePowerToughness(face);
+
+      return {
+        name: face.name ?? card.name ?? "Card face",
+        typeLine: face.type_line,
+        oracleText: face.oracle_text,
+        imageUrl: imageUris?.normal ?? imageUris?.large ?? imageUris?.small,
+        basePower: powerToughness?.power,
+        baseToughness: powerToughness?.toughness,
+      };
+    })
+    .filter((face) => face.imageUrl || face.typeLine || face.oracleText);
+
+  return faces && faces.length > 1 ? faces : undefined;
 }
 
 async function fetchScryfallNamedCard(mode: "exact" | "fuzzy", cardName: string): Promise<Response> {
@@ -276,6 +299,13 @@ function getNumericPowerToughness(card: ScryfallCard): { power: number; toughnes
   }
 
   return undefined;
+}
+
+function getNumericFacePowerToughness(face: ScryfallCardFace): { power: number; toughness: number } | undefined {
+  const power = parseNumericPowerToughness(face.power);
+  const toughness = parseNumericPowerToughness(face.toughness);
+
+  return power !== undefined && toughness !== undefined ? { power, toughness } : undefined;
 }
 
 function parseNumericPowerToughness(value?: string): number | undefined {
