@@ -416,6 +416,7 @@ function ActivePlayerPanel({
           selected={selectedForPlayer}
           swapTarget={playerSwapTarget}
           compact
+          groupHandCards={false}
           flashTrigger={handFlashTrigger}
           emptyText="Hand empty"
           onCardTap={(zone, card) => onCardTap(player.id, zone, card)}

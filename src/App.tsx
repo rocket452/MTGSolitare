@@ -228,7 +228,7 @@ export default function App() {
     const suppressCardContextMenu = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
 
-      if (target?.closest("[data-card-id], .land-stack-summary, .drag-preview, .lightbox-card")) {
+      if (target?.closest("[data-card-id], [data-drop-zone=\"hand\"], .land-stack-summary, .drag-preview, .lightbox-card")) {
         event.preventDefault();
       }
     };

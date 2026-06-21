@@ -61,9 +61,7 @@ export function CardThumb({
     dragging.current = false;
     pointerStart.current = { x: event.clientX, y: event.clientY };
 
-    if (!(isHandCard && event.pointerType === "touch")) {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
+    event.currentTarget.setPointerCapture(event.pointerId);
 
     clearLongPress();
     longPressTimer.current = window.setTimeout(() => {
@@ -93,6 +91,9 @@ export function CardThumb({
     ) {
       clearLongPress();
       suppressClick.current = true;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
       pointerStart.current = null;
       return;
     }
@@ -122,6 +123,11 @@ export function CardThumb({
     if (dragging.current) {
       suppressClick.current = true;
       onDragEnd?.({ x: event.clientX, y: event.clientY });
+    }
+
+    if (isHandCard && event.pointerType !== "mouse" && !longPressFired.current && !dragging.current && !suppressClick.current) {
+      suppressClick.current = true;
+      onTap(card);
     }
 
     dragging.current = false;
@@ -176,7 +182,10 @@ export function CardThumb({
   };
 
   return (
-    <span className={["card-thumb-shell", isHandCard ? "is-hand-card" : "", hasStackCount ? "is-card-stack" : ""].join(" ")}>
+    <span
+      className={["card-thumb-shell", isHandCard ? "is-hand-card" : "", hasStackCount ? "is-card-stack" : ""].join(" ")}
+      onContextMenuCapture={(event) => event.preventDefault()}
+    >
       <button
         className={[
           "card-thumb",
@@ -200,6 +209,7 @@ export function CardThumb({
         onLostPointerCapture={handlePointerCancel}
         onPointerLeave={clearLongPress}
         onClick={handleClick}
+        onContextMenuCapture={(event) => event.preventDefault()}
         onDoubleClick={(event) => {
           event.preventDefault();
           onInspect(card);
