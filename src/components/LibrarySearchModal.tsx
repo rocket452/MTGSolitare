@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Archive, Hand, Layers, Search, Skull, X } from "lucide-react";
 import type { CardInstance, PlayerId, ZoneName } from "../types";
 import { CardThumb } from "./CardThumb";
+import { useActionFlash } from "../utils/useActionFlash";
 
 type LibrarySearchModalProps = {
   playerId: PlayerId;
@@ -22,6 +23,7 @@ export function LibrarySearchModal({
 }: LibrarySearchModalProps) {
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const { flashTarget, flashThenRun } = useActionFlash<string>();
   const filteredCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -52,7 +54,12 @@ export function LibrarySearchModal({
   }, [onClose]);
 
   const handleMoveCard = (card: CardInstance, destination: ZoneName, libraryPosition?: "top" | "bottom") => {
-    onMoveCard(card.instanceId, destination, libraryPosition);
+    const actionKey =
+      destination === "library"
+        ? `card:${card.instanceId}:library:${libraryPosition ?? "bottom"}`
+        : `card:${card.instanceId}:${destination}`;
+
+    flashThenRun(actionKey, () => onMoveCard(card.instanceId, destination, libraryPosition));
   };
 
   return (
@@ -112,12 +119,18 @@ export function LibrarySearchModal({
                     <small>{card.typeLine ?? "Card"}</small>
                   </div>
                   <div className="library-search-card-actions">
-                    <button type="button" aria-label={`Move ${card.name} to hand`} onClick={() => handleMoveCard(card, "hand")}>
+                    <button
+                      type="button"
+                      className={flashTarget === `card:${card.instanceId}:hand` ? "is-flashing" : ""}
+                      aria-label={`Move ${card.name} to hand`}
+                      onClick={() => handleMoveCard(card, "hand")}
+                    >
                       <Hand size={14} />
                       Hand
                     </button>
                     <button
                       type="button"
+                      className={flashTarget === `card:${card.instanceId}:library:top` ? "is-flashing" : ""}
                       aria-label={`Put ${card.name} on top of library`}
                       disabled={libraryIndex === 0}
                       onClick={() => handleMoveCard(card, "library", "top")}
@@ -127,6 +140,7 @@ export function LibrarySearchModal({
                     </button>
                     <button
                       type="button"
+                      className={flashTarget === `card:${card.instanceId}:library:bottom` ? "is-flashing" : ""}
                       aria-label={`Put ${card.name} on bottom of library`}
                       disabled={libraryIndex === library.length - 1}
                       onClick={() => handleMoveCard(card, "library", "bottom")}
@@ -134,11 +148,21 @@ export function LibrarySearchModal({
                       <Archive size={14} />
                       Bottom
                     </button>
-                    <button type="button" aria-label={`Move ${card.name} to graveyard`} onClick={() => handleMoveCard(card, "graveyard")}>
+                    <button
+                      type="button"
+                      className={flashTarget === `card:${card.instanceId}:graveyard` ? "is-flashing" : ""}
+                      aria-label={`Move ${card.name} to graveyard`}
+                      onClick={() => handleMoveCard(card, "graveyard")}
+                    >
                       <Skull size={14} />
                       Grave
                     </button>
-                    <button type="button" aria-label={`Exile ${card.name}`} onClick={() => handleMoveCard(card, "exile")}>
+                    <button
+                      type="button"
+                      className={flashTarget === `card:${card.instanceId}:exile` ? "is-flashing" : ""}
+                      aria-label={`Exile ${card.name}`}
+                      onClick={() => handleMoveCard(card, "exile")}
+                    >
                       <X size={14} />
                       Exile
                     </button>

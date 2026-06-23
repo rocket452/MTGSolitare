@@ -372,7 +372,9 @@ export function moveCardToZone(
       : [...destinationCards, card];
 
   const nextSelection =
-    destination === "library" || (destination === "battlefield" && isLandCard(card))
+    destination === "library" ||
+    (destination === "battlefield" && isLandCard(card)) ||
+    (source.zone === "battlefield" && destination === "hand")
       ? null
       : {
           playerId: source.playerId,
@@ -774,12 +776,12 @@ function getStackKey(card: CardInstance): string {
 }
 
 function prepareCardForMove(card: CardInstance, source: ZoneName, destination: ZoneName): CardInstance {
-  if (destination === "battlefield") {
-    return initializeDisplayedPowerToughness(card);
+  if (source === "battlefield" && destination !== "battlefield") {
+    return resetCardAfterLeavingBattlefield(card);
   }
 
-  if (source === "battlefield") {
-    return clearDisplayedPowerToughness(card);
+  if (destination === "battlefield") {
+    return initializeDisplayedPowerToughness(card);
   }
 
   return card;
@@ -797,13 +799,23 @@ function initializeDisplayedPowerToughness(card: CardInstance): CardInstance {
   };
 }
 
-function clearDisplayedPowerToughness(card: CardInstance): CardInstance {
-  if (card.displayPower === undefined && card.displayToughness === undefined) {
-    return card;
-  }
+function resetCardAfterLeavingBattlefield(card: CardInstance): CardInstance {
+  const firstFace = card.faces?.[0];
+  const hasMultiFace = Boolean(card.faces && card.faces.length > 1);
 
   return {
     ...card,
+    name: firstFace?.name ?? card.name,
+    imageUrl: firstFace?.imageUrl ?? card.imageUrl,
+    typeLine: firstFace?.typeLine ?? card.typeLine,
+    oracleText: firstFace?.oracleText ?? card.oracleText,
+    basePower: firstFace?.basePower ?? card.basePower,
+    baseToughness: firstFace?.baseToughness ?? card.baseToughness,
+    faceIndex: hasMultiFace ? 0 : undefined,
+    tapped: false,
+    plusOneCounters: 0,
+    genericCounters: 0,
+    counters: undefined,
     displayPower: undefined,
     displayToughness: undefined,
   };
