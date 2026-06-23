@@ -345,7 +345,7 @@ function ActivePlayerPanel({
           openZone={openCardZone}
           onSelectZone={handleOpenCardZone}
           onZoneLongPress={handleOpenCardZone}
-          onLibraryLongPress={() => setIsLibraryActionsOpen(true)}
+          onLibraryPress={() => setIsLibraryActionsOpen(true)}
           onLibraryDragStart={(card, point) => onCardDragStart(player.id, "library", card, point)}
           onLibraryDragMove={onCardDragMove}
           onLibraryDragEnd={onCardDragEnd}

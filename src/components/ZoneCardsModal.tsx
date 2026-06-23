@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BadgePlus, Hand, Skull, Swords, X } from "lucide-react";
 import type { CardInstance, PlayerId, ZoneName } from "../types";
 import { CardThumb } from "./CardThumb";
+import { useActionFlash } from "../utils/useActionFlash";
 
 type ZoneCardsModalProps = {
   playerId: PlayerId;
@@ -29,6 +30,7 @@ export function ZoneCardsModal({
 }: ZoneCardsModalProps) {
   const title = zoneLabels[zoneName];
   const HeaderIcon = zoneName === "graveyard" ? Skull : BadgePlus;
+  const { flashTarget, flashThenRun } = useActionFlash<string>();
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -80,14 +82,22 @@ export function ZoneCardsModal({
                   <small>{card.typeLine ?? "Card"}</small>
                 </div>
                 <div className="zone-cards-actions">
-                  <button type="button" aria-label={`Move ${card.name} to hand`} onClick={() => onMoveCard(card.instanceId, "hand")}>
+                  <button
+                    type="button"
+                    className={flashTarget === `card:${card.instanceId}:hand` ? "is-flashing" : ""}
+                    aria-label={`Move ${card.name} to hand`}
+                    onClick={() => flashThenRun(`card:${card.instanceId}:hand`, () => onMoveCard(card.instanceId, "hand"))}
+                  >
                     <Hand size={14} />
                     Hand
                   </button>
                   <button
                     type="button"
+                    className={flashTarget === `card:${card.instanceId}:battlefield` ? "is-flashing" : ""}
                     aria-label={`Move ${card.name} to battlefield`}
-                    onClick={() => onMoveCard(card.instanceId, "battlefield")}
+                    onClick={() =>
+                      flashThenRun(`card:${card.instanceId}:battlefield`, () => onMoveCard(card.instanceId, "battlefield"))
+                    }
                   >
                     <Swords size={14} />
                     Field

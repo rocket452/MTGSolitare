@@ -13,7 +13,7 @@ type ZoneChipsProps = {
   openZone?: ZoneName | null;
   onSelectZone?: (zone: ZoneName) => void;
   onToggleZone?: (zone: ZoneName) => void;
-  onLibraryLongPress?: () => void;
+  onLibraryPress?: () => void;
   onZoneLongPress?: (zone: ZoneName) => void;
   onLibraryDragStart?: (card: CardInstance, point: DragPoint) => void;
   onLibraryDragMove?: (point: DragPoint) => void;
@@ -28,7 +28,7 @@ export function ZoneChips({
   openZone,
   onSelectZone,
   onToggleZone,
-  onLibraryLongPress,
+  onLibraryPress,
   onZoneLongPress,
   onLibraryDragStart,
   onLibraryDragMove,
@@ -42,6 +42,11 @@ export function ZoneChips({
   const handleZoneClick = (zone: ZoneName) => {
     if (suppressZoneClick.current === zone) {
       suppressZoneClick.current = null;
+      return;
+    }
+
+    if (zone === "library") {
+      onLibraryPress?.();
       return;
     }
 
@@ -69,17 +74,6 @@ export function ZoneChips({
     if (onLibraryDragStart) {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
-
-    if (!onLibraryLongPress) {
-      return;
-    }
-
-    clearLongPress();
-    longPressTimer.current = window.setTimeout(() => {
-      suppressZoneClick.current = "library";
-      pointerStart.current = null;
-      onLibraryLongPress();
-    }, LONG_PRESS_MS);
   };
   const handleLibraryPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const start = pointerStart.current;
@@ -142,7 +136,8 @@ export function ZoneChips({
         data-drop-zone="library"
         data-player-id={player.id}
         aria-label={`${player.name} library, ${player.zones.library.length} cards`}
-        title="Long press for library options"
+        aria-haspopup="dialog"
+        title="Tap for library options"
         onPointerDown={handleLibraryPointerDown}
         onPointerMove={handleLibraryPointerMove}
         onPointerUp={finishLibraryPointer}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Eye, Hand, ListEnd, Skull, Swords, X } from "lucide-react";
 import type { CardInstance, PlayerId, ZoneName } from "../types";
 import { CardThumb } from "./CardThumb";
+import { useActionFlash } from "../utils/useActionFlash";
 
 type PeekLibraryModalProps = {
   playerId: PlayerId;
@@ -30,6 +31,7 @@ export function PeekLibraryModal({
 }: PeekLibraryModalProps) {
   const [peekCount, setPeekCount] = useState(() => Math.min(4, Math.max(1, library.length)));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const { flashTarget, flashThenRun } = useActionFlash<string>();
   const shownCards = useMemo(() => library.slice(0, peekCount), [library, peekCount]);
   const selectedCount = selectedIds.size;
   const selectedIdsInShownOrder = useMemo(
@@ -109,6 +111,10 @@ export function PeekLibraryModal({
     setSelectedIds(new Set());
   };
 
+  const moveSelectedWithFlash = (target: "bottom" | "grave", action: () => void) => {
+    flashThenRun(target, action);
+  };
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="peek-title" onClick={onClose}>
       <section className="peek-modal" onClick={(event) => event.stopPropagation()}>
@@ -143,11 +149,21 @@ export function PeekLibraryModal({
 
         <div className="peek-actions">
           <span>{selectedCount} selected</span>
-          <button type="button" disabled={selectedCount === 0} onClick={handleMoveSelectedToBottom}>
+          <button
+            type="button"
+            className={flashTarget === "bottom" ? "is-flashing" : ""}
+            disabled={selectedCount === 0}
+            onClick={() => moveSelectedWithFlash("bottom", handleMoveSelectedToBottom)}
+          >
             <ListEnd size={15} />
             Bottom
           </button>
-          <button type="button" disabled={selectedCount === 0} onClick={handleMoveSelectedToGraveyard}>
+          <button
+            type="button"
+            className={flashTarget === "grave" ? "is-flashing" : ""}
+            disabled={selectedCount === 0}
+            onClick={() => moveSelectedWithFlash("grave", handleMoveSelectedToGraveyard)}
+          >
             <Skull size={15} />
             Grave
           </button>
@@ -188,14 +204,24 @@ export function PeekLibraryModal({
                     </button>
                   </div>
                   <div className="peek-card-move-actions">
-                    <button type="button" aria-label={`Move ${card.name} to hand`} onClick={() => moveCardToZone(card.instanceId, "hand")}>
+                    <button
+                      type="button"
+                      className={flashTarget === `card:${card.instanceId}:hand` ? "is-flashing" : ""}
+                      aria-label={`Move ${card.name} to hand`}
+                      onClick={() =>
+                        flashThenRun(`card:${card.instanceId}:hand`, () => moveCardToZone(card.instanceId, "hand"))
+                      }
+                    >
                       <Hand size={15} />
                       Hand
                     </button>
                     <button
                       type="button"
+                      className={flashTarget === `card:${card.instanceId}:field` ? "is-flashing" : ""}
                       aria-label={`Move ${card.name} to battlefield`}
-                      onClick={() => moveCardToZone(card.instanceId, "battlefield")}
+                      onClick={() =>
+                        flashThenRun(`card:${card.instanceId}:field`, () => moveCardToZone(card.instanceId, "battlefield"))
+                      }
                     >
                       <Swords size={15} />
                       Field
